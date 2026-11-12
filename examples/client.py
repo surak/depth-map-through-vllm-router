@@ -13,7 +13,7 @@ import mimetypes
 import os
 import urllib.request
 
-MODEL = "alias-visual-geometry-omega"
+MODEL = "alias-visual-geometry"
 
 
 def ask(text: str, photos: list[str] = ()) -> dict:

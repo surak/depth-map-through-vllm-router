@@ -1,7 +1,6 @@
 #!/bin/bash
 #SBATCH --job-name=visual-geometry
 #SBATCH --partition=gpus
-#SBATCH --nodelist=haicluster1
 #SBATCH --nodes=1
 #SBATCH --ntasks=1
 #SBATCH --cpus-per-task=8
@@ -10,7 +9,8 @@
 #SBATCH --requeue
 #SBATCH --output=/p/haicluster/llama/blablador-fleet/logs/visual-geometry/%j.slurm.out
 #SBATCH --error=/p/haicluster/llama/blablador-fleet/logs/visual-geometry/%j.slurm.err
-# VGGT-1B mapping behind the OpenAI API, registered with synapse as alias-visual-geometry.
+# VGGT-Omega-1B mapping behind the OpenAI API, registered with synapse as alias-visual-geometry.
+# Slurm picks any node with a free GPU; synapse finds it through the supervisor on that node.
 # The repository copy is the source; the fleet runs the copy in blablador-fleet/launchers,
 # and the code is checked out in FastChat/depth-map-through-vllm-router.
 set -euo pipefail
@@ -19,6 +19,7 @@ F=/p/haicluster/llama/blablador-fleet
 APP=/p/haicluster/llama/FastChat/depth-map-through-vllm-router
 PORT=8030
 cd "$APP"
+if ss -ltn | grep -q ":$PORT "; then echo "port $PORT is taken on $(hostname)" >&2; exit 1; fi
 VLLM_API_KEY="$(cat "$ROOT/synapse-external/backend-key-$PORT")"
 export VLLM_API_KEY
 export CUDA_VISIBLE_DEVICES=${SLURM_JOB_GPUS:-0}
@@ -27,8 +28,8 @@ ENGINE= CLIENT=
 cleanup() { [[ -z "$CLIENT" ]] || kill -TERM "$CLIENT" 2>/dev/null || true; [[ -z "$ENGINE" ]] || kill -TERM -- "-$ENGINE" 2>/dev/null || true; }
 trap cleanup EXIT
 trap 'exit 0' TERM INT
-setsid "$APP/.venv/bin/python" -m mapper.server --model "$ROOT/models/VGGT-1B" \
- --host 0.0.0.0 --port $PORT --served-model-name alias-visual-geometry vggt-1b \
+setsid "$APP/.venv/bin/python" -m mapper.server --model "$ROOT/models/VGGT-Omega/vggt_omega_1b_512.pt" \
+ --host 0.0.0.0 --port $PORT --served-model-name alias-visual-geometry vggt-omega-1b \
  --data-dir "$ROOT/visual-geometry-sessions" \
  >"$F/logs/visual-geometry/$SLURM_JOB_ID.engine.log" 2>&1 &
 ENGINE=$!

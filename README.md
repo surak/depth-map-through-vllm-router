@@ -1,9 +1,8 @@
 # depth-map-through-vllm-router
 
-[VGGT-Ω](https://github.com/facebookresearch/vggt-omega) and [VGGT-1B](https://github.com/facebookresearch/vggt)
-3D mapping served with an OpenAI-compatible API, so it can sit next to vLLM models behind a router
-(synapse / Blablador) as **`alias-visual-geometry-omega`** (VGGT-Ω, the default) and
-**`alias-visual-geometry`** (VGGT-1B).
+[VGGT-Ω](https://github.com/facebookresearch/vggt-omega) 3D mapping served with an OpenAI-compatible API,
+so it can sit next to vLLM models behind a router (synapse / Blablador) as
+**`alias-visual-geometry`**.
 
 Website: https://surak.github.io/depth-map-through-vllm-router/
 
@@ -102,34 +101,24 @@ a step takes about 1–2 s, and 96 photos take about 20 s and 13 GB.
 
 ```bash
 uv venv -p 3.12 .venv
-uv pip install -p .venv/bin/python torch==2.5.1 torchvision==0.20.1 --index-url https://download.pytorch.org/whl/cu124
+uv pip install -p .venv/bin/python torch==2.7.1 torchvision==0.22.1 --index-url https://download.pytorch.org/whl/cu126
 uv pip install -p .venv/bin/python -e '.[model,test]'
 .venv/bin/python -m pytest
-VLLM_API_KEY=secret .venv/bin/python -m mapper.server --model /path/to/VGGT-1B --port 8030
+VLLM_API_KEY=secret .venv/bin/python -m mapper.server --model /path/to/vggt_omega_1b_512.pt --port 8030
 ```
 
-For VGGT-Ω, which needs torch 2.6 or newer, use a second venv and point `--model` at a `.pt`
-checkpoint from [facebook/VGGT-Omega](https://huggingface.co/facebook/VGGT-Omega) (gated):
-
-```bash
-uv venv -p 3.12 .venv-omega
-uv pip install -p .venv-omega/bin/python -e '.[omega,test]'
-VLLM_API_KEY=secret .venv-omega/bin/python -m mapper.server --model /path/to/vggt_omega_1b_512.pt --port 8031
-```
-
-Use `--image-resolution 416` with `vggt_omega_1b_416_reproduce.pt`.
+The checkpoint comes from [facebook/VGGT-Omega](https://huggingface.co/facebook/VGGT-Omega), which is
+gated. Use `--image-resolution 416` with `vggt_omega_1b_416_reproduce.pt`.
 
 The server answers `/health`, `/v1/models`, `/metrics` and `/v1/chat/completions` (also with
 `stream: true`), which is what the synapse supervisor and client check.
 
 On HAICLUSTER, [`launchers/visual-geometry.slurm`](launchers/visual-geometry.slurm) is the job.
-It uses one GPU on haicluster1 and port 8030, reads its key from
+Slurm puts it on any node with a free GPU. It uses port 8030, reads its key from
 `synapse-external/backend-key-8030`, and registers with synapse through `supervisor.py`, like the
 other models. The code is checked out in `/p/haicluster/llama/FastChat/depth-map-through-vllm-router`,
 next to the other models, and the fleet runs a copy of the launcher from `blablador-fleet/launchers/`.
-[`launchers/visual-geometry-omega.slurm`](launchers/visual-geometry-omega.slurm) is the VGGT-Ω job:
-one GPU on haicluster2 (haicluster1 is full), port 8031, `.venv-omega`, and its own sessions folder.
 
 ## Licence
 
-The code here is MIT. The VGGT-1B and VGGT-Ω weights are released by Meta for non-commercial research use only.
+The code here is MIT. The VGGT-Ω weights are released by Meta for non-commercial research use only.

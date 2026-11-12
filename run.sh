@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# ./run.sh serve [--port 8080]   web page for sending photos from a phone (reads .env)
+# ./run.sh serve [--port 8765]   web page for sending photos from a phone (reads .env)
 # ./run.sh test                  run the tests
 set -euo pipefail
 cd "$(dirname "$0")"
@@ -21,5 +21,5 @@ command=${1:-serve}
 case "$command" in
   serve) exec .venv/bin/python -m mapper.web "$@" ;;
   test) exec .venv/bin/python -m pytest -q "$@" ;;
-  *) echo "usage: ./run.sh serve [--port 8080] | ./run.sh test" >&2; exit 2 ;;
+  *) echo "usage: ./run.sh serve [--port 8765] | ./run.sh test" >&2; exit 2 ;;
 esac

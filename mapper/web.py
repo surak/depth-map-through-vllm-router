@@ -132,7 +132,7 @@ def main() -> None:
 
     p = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     p.add_argument("--host", default="0.0.0.0", help="0.0.0.0 lets phones on the same network connect")
-    p.add_argument("--port", type=int, default=8080)
+    p.add_argument("--port", type=int, default=8765)
     p.add_argument("--env", default=".env")
     p.add_argument("--data-dir", default="web-data")
     args = p.parse_args()

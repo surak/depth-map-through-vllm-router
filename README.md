@@ -40,6 +40,22 @@ A `step` answer:
 
 [`examples/client.py`](examples/client.py) does this from the command line.
 
+## Sending photos from a phone
+
+```bash
+cp .env.example .env      # put your router URL and key in it
+./run.sh serve            # prints the address to open on the phone
+```
+
+The page on the phone lets you pick or take photos, set the camera height, see the top-down map
+after each batch and build the 3D model. The model opens in a viewer you can turn with a finger, and
+can be downloaded as PLY.
+
+- **Photo size:** photos are shrunk to 1024 px in the browser before they are sent.
+- **Key:** the server adds the API key from `.env`, so the key never reaches the phone. Anyone on
+  your network who can open the page can use it, though.
+- **Tests:** `./run.sh test` runs them.
+
 ## How the map is made
 
 VGGT returns camera poses and a point cloud in the first camera's frame (x right, y down,

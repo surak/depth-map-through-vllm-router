@@ -160,7 +160,7 @@ def main() -> None:
     if not env.get("OPENAI_API_KEY"):
         raise SystemExit(f"no OPENAI_API_KEY in {args.env}; copy .env.example to .env and fill it in")
     upstream = Upstream(env.get("OPENAI_BASE_URL", "https://api.blablador.fz-juelich.de/v1"),
-                        env["OPENAI_API_KEY"], env.get("MAPPER_MODEL", "alias-visual-geometry"))
+                        env["OPENAI_API_KEY"], env.get("MAPPER_MODEL", "alias-visual-geometry-omega"))
     print("\n  Open on your phone (on the same Wi-Fi as this computer):", flush=True)
     for interface, address in local_addresses():
         print(f"    http://{address}:{args.port}/   ({interface})", flush=True)

@@ -350,7 +350,8 @@ def main() -> None:
     import uvicorn
 
     p = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    p.add_argument("--model", required=True, help="folder with the VGGT-1B weights")
+    p.add_argument("--model", required=True, help="VGGT-1B folder or VGGT-Omega .pt checkpoint")
+    p.add_argument("--image-resolution", type=int, default=512, help="VGGT-Omega input size (416 for the reproduce checkpoint)")
     p.add_argument("--host", default="0.0.0.0")
     p.add_argument("--port", type=int, default=8030)
     p.add_argument("--served-model-name", nargs="+", default=["alias-visual-geometry"])
@@ -359,9 +360,9 @@ def main() -> None:
     p.add_argument("--final-frames", type=int, default=96, help="most photos used for finish")
     args = p.parse_args()
 
-    from .model import VGGTRunner
+    from .model import load
 
-    mapper = Mapper(VGGTRunner(args.model), Path(args.data_dir), args.step_frames, args.final_frames)
+    mapper = Mapper(load(args.model, args.image_resolution), Path(args.data_dir), args.step_frames, args.final_frames)
     app = make_app(mapper, args.served_model_name, os.environ.get("VLLM_API_KEY", ""))
     uvicorn.run(app, host=args.host, port=args.port, log_level="info")
 

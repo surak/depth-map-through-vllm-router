@@ -41,7 +41,7 @@ class FakeRouter:
 @pytest.fixture
 def web(tmp_path):
     router = FakeRouter()
-    upstream = Upstream("https://router.example/v1", "secret", "alias-visual-geometry", httpx.MockTransport(router))
+    upstream = Upstream("https://router.example/v1", "secret", "alias-visual-geometry-omega", httpx.MockTransport(router))
     client = TestClient(make_app(upstream, tmp_path))
     client.router = router
     return client
@@ -58,7 +58,7 @@ def test_step_forwards_photos_and_height(web):
                                     "images": ["data:image/jpeg;base64,AAAA"] * 3})
     assert r.status_code == 200 and r.json()["frames"] == 3
     sent = web.router.requests[-1]
-    assert sent["model"] == "alias-visual-geometry"
+    assert sent["model"] == "alias-visual-geometry-omega"
     assert sent["messages"][0]["content"][0]["text"] == "step session=hall camera_height_cm=120.0"
 
 

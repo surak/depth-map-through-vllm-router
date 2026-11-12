@@ -80,7 +80,7 @@ can be downloaded as PLY.
 
 ## How the map is made
 
-VGGT returns camera poses and a point cloud in the first camera's frame (x right, y down,
+VGGT-Ω returns camera poses and a point cloud in the first camera's frame (x right, y down,
 z forward), but without a scale.
 
 1. **Scale.** The camera is assumed to be roughly level and at a known height, `camera_height_cm`,
@@ -90,9 +90,10 @@ z forward), but without a scale.
    plus 15 cm become obstacles. Everything else is unknown.
 3. **Frontiers.** Free cells that touch unknown ones are grouped in 30° sectors.
 
-Each step reruns VGGT on up to 32 photos: the first, the latest and an even spread between them.
+Each step reruns VGGT-Ω on up to 32 photos: the first, the latest and an even spread between them.
 That keeps the first camera as the origin, so poses stay comparable between steps. On an RTX 3090,
-a step takes about 1–2 s, and 96 photos take about 20 s and 13 GB.
+through the router, a step takes about 1–2 s, and a model from 37 photos under 20 s; VGGT-Ω needs
+about 13 GB for 100 photos.
 
 **Tilt the camera a little down so it sees the floor.** Without a visible floor the answer has a
 `note` instead of a map.

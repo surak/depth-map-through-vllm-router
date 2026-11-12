@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Visual Geometry Mapper</title>
-<meta name="description" content="VGGT 3D mapping served through an OpenAI-compatible API, so a small robot car can map a room via a vLLM router.">
+<meta name="description" content="VGGT-Ω 3D mapping served through an OpenAI-compatible API, so a small robot car can map a room via a vLLM router.">
 <style>
   :root {
     --bg: #fbfaf7; --fg: #1d1d1f; --muted: #5f6368; --card: #ffffff; --line: #e4e1da;
@@ -57,7 +57,7 @@
   <span class="tag">alias-visual-geometry</span>
   <h1>Map a room with a robot car and a chat API</h1>
   <p class="lead">Turns photos into a 3D model and a "where to go next" map with
-  <a href="https://github.com/facebookresearch/vggt">VGGT</a>. It hides behind an
+  <a href="https://github.com/facebookresearch/vggt-omega">VGGT-Ω</a>. It hides behind an
   OpenAI-compatible endpoint, so it runs next to your vLLM models behind the same router, key and URL.</p>
   <div class="buttons">
     <a class="button primary" href="https://github.com/surak/depth-map-through-vllm-router">Code on GitHub</a>
@@ -76,7 +76,7 @@
   <figure>
     <img src="img/cloud.jpg" alt="Coloured 3D point cloud of the bulldozer, the mat and the table, seen from above">
     <figcaption>Six ordinary photos in, a coloured point cloud with 540,000 points out, in under 4 seconds
-    through the public router. (The photos are VGGT's own example scene.)</figcaption>
+    through the public router. (The photos are VGGT's own example scene; this picture was made with VGGT-1B, before the switch to VGGT-Ω.)</figcaption>
   </figure>
 </section>
 
@@ -157,17 +157,21 @@ print(reply.choices[0].message.content)</code></pre>
 
 <section>
   <h2>How the map is made</h2>
-  <p>VGGT places all photos in one 3D frame, but it doesn't know how big anything is.</p>
+  <p>VGGT-Ω places all photos in one 3D frame, but it doesn't know how big anything is.</p>
   <ul>
     <li><strong>Scale.</strong> The camera sits at a known height on the car, so the mapper finds the
-    floor, the densest flat layer below the cameras, and that height turns VGGT units into centimetres.</li>
+    floor, the densest flat layer below the cameras, and that height turns VGGT-Ω units into centimetres.</li>
     <li><strong>Grid.</strong> Points on the floor are free space. Points between 4 cm and a little
     above the camera are obstacles. Everything else is unknown.</li>
     <li><strong>Frontiers.</strong> Free cells at the edge of the unknown are grouped by direction.</li>
   </ul>
   <p><strong>Camera angle:</strong> tilt the camera slightly down. Without a visible floor there is no scale.</p>
-  <p><strong>Speed:</strong> on an RTX 3090, a step takes 1–2 seconds, and a final model from 96
-  photos takes about 20 seconds and 13 GB of GPU memory.</p>
+  <p><strong>Speed:</strong> on an RTX 3090, through the public router, a step takes 1–2 seconds,
+  and a final model from 37 phone photos takes under 20 seconds, upload included. VGGT-Ω needs about
+  13 GB of GPU memory for 100 photos.</p>
+  <p><strong>Why VGGT-Ω:</strong> it replaced VGGT-1B in November 2026. On the same 37 photos of a room
+  it kept walls and shelves straighter, and in its authors' benchmarks it roughly triples camera
+  accuracy on indoor scenes (7 Scenes, AUC@3° 10.9 → 29.6).</p>
 </section>
 
 <section id="run">
@@ -175,18 +179,18 @@ print(reply.choices[0].message.content)</code></pre>
 <pre><code>git clone https://github.com/surak/depth-map-through-vllm-router
 cd depth-map-through-vllm-router
 uv venv -p 3.12 .venv
-uv pip install -p .venv/bin/python torch==2.5.1 torchvision==0.20.1 \
-    --index-url https://download.pytorch.org/whl/cu124
+uv pip install -p .venv/bin/python torch==2.7.1 torchvision==0.22.1 \
+    --index-url https://download.pytorch.org/whl/cu126
 uv pip install -p .venv/bin/python -e '.[model,test]'
-hf download facebook/VGGT-1B --local-dir models/VGGT-1B
-VLLM_API_KEY=secret .venv/bin/python -m mapper.server --model models/VGGT-1B --port 8030</code></pre>
+hf download facebook/VGGT-Omega vggt_omega_1b_512.pt --local-dir models/VGGT-Omega   # gated: ask for access first
+VLLM_API_KEY=secret .venv/bin/python -m mapper.server --model models/VGGT-Omega/vggt_omega_1b_512.pt --port 8030</code></pre>
   <p>It answers <code>/health</code>, <code>/v1/models</code>, <code>/metrics</code> and
   <code>/v1/chat/completions</code>, with or without streaming. That's enough for routers that
   expect a vLLM backend. The repository includes a Slurm launcher that registers it with a synapse router.</p>
 </section>
 
 <footer>
-  <p>Code: MIT. VGGT-1B weights: Meta, non-commercial use only.
+  <p>Code: MIT. VGGT-Ω weights: Meta, non-commercial research use only.
   LEGO® is a trademark of the LEGO Group, which does not sponsor, authorize or endorse this project.</p>
 </footer>
 </main>

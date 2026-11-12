@@ -1,0 +1,260 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Room Mapper</title>
+<style>
+  :root {
+    --bg: #fbfaf7; --fg: #1d1d1f; --muted: #6b6f76; --card: #fff; --line: #e4e1da;
+    --accent: #d9480f; --accent-fg: #fff; --bad: #c92a2a; --good: #2b8a3e;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root { --bg: #141416; --fg: #ececec; --muted: #a0a4ab; --card: #1d1d21; --line: #2e2e34;
+            --accent: #ff8a4c; --accent-fg: #1a0e06; --bad: #ff6b6b; --good: #69db7c; }
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--fg); font: 17px/1.5 system-ui, -apple-system, sans-serif; }
+  main { max-width: 720px; margin: 0 auto; padding: 16px 16px calc(32px + env(safe-area-inset-bottom)); }
+  h1 { font-size: 1.6rem; margin: 8px 0 4px; }
+  .sub { color: var(--muted); margin: 0 0 16px; }
+  .card { background: var(--card); border: 1px solid var(--line); border-radius: 14px; padding: 16px; margin-bottom: 16px; }
+  label { display: block; font-weight: 600; margin-bottom: 4px; }
+  .hint { color: var(--muted); font-size: .85rem; font-weight: 400; }
+  input[type=text], input[type=number] { width: 100%; font: inherit; padding: 10px 12px; border-radius: 10px;
+         border: 1px solid var(--line); background: var(--bg); color: var(--fg); }
+  .row { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+  button, .button { display: block; width: 100%; font: 600 1.05rem system-ui, sans-serif; padding: 14px; border-radius: 12px;
+           border: 1px solid var(--line); background: var(--card); color: var(--fg); cursor: pointer; text-align: center;
+           text-decoration: none; margin-top: 12px; }
+  button.primary { background: var(--accent); border-color: var(--accent); color: var(--accent-fg); }
+  button:disabled { opacity: .45; cursor: default; }
+  input[type=file] { display: none; }
+  .thumbs { display: grid; grid-template-columns: repeat(auto-fill, minmax(72px, 1fr)); gap: 6px; margin-top: 12px; }
+  .thumbs div { position: relative; aspect-ratio: 1; border-radius: 8px; overflow: hidden; background: var(--line); }
+  .thumbs img { width: 100%; height: 100%; object-fit: cover; display: block; }
+  .thumbs .sent::after { content: "✓"; position: absolute; right: 4px; bottom: 2px; color: #fff;
+                         text-shadow: 0 0 3px #000; font-weight: 700; }
+  progress { width: 100%; height: 10px; margin-top: 12px; accent-color: var(--accent); }
+  #message { min-height: 1.5em; margin: 8px 0 0; }
+  #message.bad { color: var(--bad); } #message.good { color: var(--good); }
+  .stats { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; text-align: center; margin-bottom: 12px; }
+  .stats b { display: block; font-size: 1.3rem; }
+  .stats span { color: var(--muted); font-size: .8rem; }
+  #map { width: 100%; max-width: 400px; margin: 0 auto; display: block; border-radius: 8px; image-rendering: pixelated; }
+  .legend { color: var(--muted); font-size: .8rem; text-align: center; margin-top: 6px; }
+  #viewer { width: 100%; height: 60vh; min-height: 320px; border-radius: 12px; background: #18181b; touch-action: none; }
+  [hidden] { display: none !important; }
+</style>
+</head>
+<body>
+<main>
+  <h1>📷 Room Mapper</h1>
+  <p class="sub">Take photos all around a room, send them, and get a 3D model back.</p>
+
+  <section class="card">
+    <div class="row">
+      <div>
+        <label for="session">Name</label>
+        <input id="session" type="text" autocomplete="off" autocapitalize="none" spellcheck="false">
+      </div>
+      <div>
+        <label for="height">Camera height <span class="hint">cm</span></label>
+        <input id="height" type="number" inputmode="decimal" min="1" max="300" step="1">
+      </div>
+    </div>
+    <p class="hint">How high the camera is above the floor: about 120 in your hand, about 10 on the car.
+      Keep the floor in the pictures and move a little between them.</p>
+  </section>
+
+  <section class="card">
+    <input id="files" type="file" accept="image/*" multiple>
+    <button id="pick" class="primary">➕ Add photos</button>
+    <div class="thumbs" id="thumbs"></div>
+    <button id="send" disabled>📤 Send photos</button>
+    <progress id="progress" value="0" max="1" hidden></progress>
+    <p id="message"></p>
+  </section>
+
+  <section class="card" id="result" hidden>
+    <div class="stats">
+      <div><b id="frames">0</b><span>photos</span></div>
+      <div><b id="frontiers">–</b><span>unexplored edges</span></div>
+      <div><b id="ahead">–</b><span>obstacle ahead</span></div>
+    </div>
+    <img id="map" alt="Top-down map of what has been seen so far">
+    <p class="legend">white floor · black obstacles · grey unknown · orange edges · blue path</p>
+    <button id="finish" class="primary">🧊 Build the 3D model</button>
+  </section>
+
+  <section class="card" id="model" hidden>
+    <div id="viewer"></div>
+    <p class="hint" id="modelinfo"></p>
+    <a class="button" id="download" download>⬇️ Download PLY</a>
+  </section>
+</main>
+
+<script type="importmap">
+{ "imports": {
+  "three": "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js",
+  "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/"
+} }
+</script>
+<script type="module">
+const $ = (id) => document.getElementById(id);
+const BATCH = 4, MAX_SIDE = 1024;
+const photos = [];  // {file, url, sent}
+
+function remember(key, fallback) {
+  try { return localStorage.getItem(key) || fallback; } catch { return fallback; }
+}
+function store(key, value) { try { localStorage.setItem(key, value); } catch {} }
+
+const stamp = new Date().toISOString().slice(0, 16).replace(/[-:]/g, "").replace("T", "-");
+$("session").value = remember("session", "room-" + stamp);
+$("height").value = remember("height", "120");
+$("session").onchange = () => store("session", $("session").value.trim());
+$("height").onchange = () => store("height", $("height").value);
+
+function say(text, kind = "") { $("message").textContent = text; $("message").className = kind; }
+
+function refresh() {
+  const waiting = photos.filter(p => !p.sent).length;
+  $("send").disabled = waiting === 0;
+  $("send").textContent = waiting ? `📤 Send ${waiting} photo${waiting > 1 ? "s" : ""}` : "📤 Send photos";
+}
+
+$("pick").onclick = () => $("files").click();
+$("files").onchange = () => {
+  for (const file of $("files").files) {
+    const p = { file, url: URL.createObjectURL(file), sent: false };
+    p.box = document.createElement("div");
+    p.box.innerHTML = `<img alt="">`;
+    p.box.firstChild.src = p.url;
+    $("thumbs").append(p.box);
+    photos.push(p);
+  }
+  $("files").value = "";
+  refresh();
+};
+
+async function shrink(file) {
+  const bitmap = await createImageBitmap(file, { imageOrientation: "from-image" });
+  const k = Math.min(1, MAX_SIDE / Math.max(bitmap.width, bitmap.height));
+  const canvas = document.createElement("canvas");
+  canvas.width = Math.round(bitmap.width * k);
+  canvas.height = Math.round(bitmap.height * k);
+  canvas.getContext("2d").drawImage(bitmap, 0, 0, canvas.width, canvas.height);
+  return canvas.toDataURL("image/jpeg", 0.85);
+}
+
+async function api(path, body) {
+  const r = await fetch(path, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
+  const data = await r.json().catch(() => ({ error: `HTTP ${r.status}` }));
+  if (!r.ok) throw new Error(data.error || `HTTP ${r.status}`);
+  return data;
+}
+
+function session() {
+  const name = $("session").value.trim();
+  if (!/^[A-Za-z0-9_-]{1,64}$/.test(name)) throw new Error("Name: use letters, digits, - and _ only");
+  return name;
+}
+
+function show(result) {
+  $("result").hidden = false;
+  $("frames").textContent = result.frames ?? 0;
+  if (result.frontiers) $("frontiers").textContent = result.frontiers.length;
+  $("ahead").textContent = result.obstacle_ahead_cm != null ? `${Math.round(result.obstacle_ahead_cm)} cm` : "–";
+  if (result.map_png) $("map").src = "data:image/png;base64," + result.map_png;
+}
+
+$("send").onclick = async () => {
+  const todo = photos.filter(p => !p.sent);
+  $("send").disabled = $("pick").disabled = true;
+  $("progress").hidden = false; $("progress").max = todo.length; $("progress").value = 0;
+  try {
+    const name = session();
+    for (let i = 0; i < todo.length; i += BATCH) {
+      const batch = todo.slice(i, i + BATCH);
+      say(`Sending photos ${i + 1}–${i + batch.length} of ${todo.length}…`);
+      const images = await Promise.all(batch.map(p => shrink(p.file)));
+      const result = await api("/api/step", { session: name, camera_height_cm: $("height").value, images });
+      batch.forEach(p => { p.sent = true; p.box.classList.add("sent"); });
+      $("progress").value = i + batch.length;
+      show(result);
+      if (result.note) say(result.note, "bad");
+    }
+    if (!$("message").classList.contains("bad")) say("Sent. Add more photos, or build the 3D model.", "good");
+  } catch (e) {
+    say(e.message, "bad");
+  } finally {
+    $("pick").disabled = false; $("progress").hidden = true; refresh();
+  }
+};
+
+$("finish").onclick = async () => {
+  $("finish").disabled = true;
+  say("Building the 3D model… this takes up to a minute.");
+  try {
+    const result = await api("/api/finish", { session: session() });
+    show(result);
+    if (!result.ply_url) throw new Error(result.note || "no model came back");
+    $("model").hidden = false;
+    $("download").href = result.ply_url;
+    $("modelinfo").textContent = `${result.points.toLocaleString()} points from ${result.frames_used} photos` +
+      (result.units === "cm" ? ", in centimetres." : ". No floor found, so the size is not to scale.") +
+      " Drag to turn, pinch to zoom.";
+    await view(result.ply_url);
+    say("Done!", "good");
+    $("model").scrollIntoView({ behavior: "smooth" });
+  } catch (e) {
+    say(e.message, "bad");
+  } finally {
+    $("finish").disabled = false;
+  }
+};
+
+let viewer;
+async function view(url) {
+  const THREE = await import("three");
+  const { PLYLoader } = await import("three/addons/loaders/PLYLoader.js");
+  const { OrbitControls } = await import("three/addons/controls/OrbitControls.js");
+  const box = $("viewer");
+  if (!viewer) {
+    const renderer = new THREE.WebGLRenderer({ antialias: true });
+    renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
+    box.append(renderer.domElement);
+    const scene = new THREE.Scene();
+    scene.background = new THREE.Color(0x18181b);
+    const camera = new THREE.PerspectiveCamera(60, 1, 0.1, 100000);
+    const controls = new OrbitControls(camera, renderer.domElement);
+    controls.enableDamping = true;
+    const resize = () => {
+      renderer.setSize(box.clientWidth, box.clientHeight);
+      camera.aspect = box.clientWidth / box.clientHeight;
+      camera.updateProjectionMatrix();
+    };
+    addEventListener("resize", resize);
+    resize();
+    renderer.setAnimationLoop(() => { controls.update(); renderer.render(scene, camera); });
+    viewer = { scene, camera, controls, points: null, resize };
+  }
+  viewer.resize();
+  const geometry = await new PLYLoader().loadAsync(url);
+  geometry.rotateX(Math.PI);  // the model has y pointing down
+  geometry.computeBoundingSphere();
+  const { center, radius } = geometry.boundingSphere;
+  geometry.translate(-center.x, -center.y, -center.z);
+  if (viewer.points) { viewer.scene.remove(viewer.points); viewer.points.geometry.dispose(); }
+  const material = new THREE.PointsMaterial({ size: radius / 400, vertexColors: true });
+  viewer.points = new THREE.Points(geometry, material);
+  viewer.scene.add(viewer.points);
+  viewer.camera.position.set(0, radius * 0.9, radius * 1.4);
+  viewer.controls.target.set(0, 0, 0);
+}
+
+refresh();
+</script>
+</body>
+</html>

@@ -1,0 +1,168 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Visual Geometry Mapper</title>
+<meta name="description" content="VGGT 3D mapping served through an OpenAI-compatible API, so a small robot car can map a room via a vLLM router.">
+<style>
+  :root {
+    --bg: #fbfaf7; --fg: #1d1d1f; --muted: #5f6368; --card: #ffffff; --line: #e4e1da;
+    --accent: #d9480f; --accent-soft: #fff1e8; --code: #f3f1ec;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --bg: #141416; --fg: #ececec; --muted: #a0a4ab; --card: #1d1d21; --line: #2e2e34;
+      --accent: #ff8a4c; --accent-soft: #2a1c14; --code: #232328;
+    }
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--fg);
+         font: 17px/1.6 system-ui, -apple-system, "Segoe UI", sans-serif; }
+  main { max-width: 860px; margin: 0 auto; padding: 0 16px 64px; }
+  header { padding: 56px 0 24px; }
+  h1 { font-size: clamp(2rem, 6vw, 3rem); line-height: 1.1; margin: 0 0 12px; letter-spacing: -0.02em; }
+  h2 { margin: 48px 0 12px; font-size: 1.5rem; }
+  .lead { font-size: 1.2rem; color: var(--muted); margin: 0; }
+  .tag { display: inline-block; font: 600 .8rem/1 ui-monospace, monospace; color: var(--accent);
+         background: var(--accent-soft); padding: 6px 10px; border-radius: 999px; margin-bottom: 16px; }
+  a { color: var(--accent); }
+  img { max-width: 100%; height: auto; display: block; border-radius: 10px; }
+  figure { margin: 24px 0; }
+  figcaption { color: var(--muted); font-size: .9rem; margin-top: 8px; }
+  .photos { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
+  .loop { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 12px;
+          counter-reset: step; padding: 0; list-style: none; }
+  .loop li { background: var(--card); border: 1px solid var(--line); border-radius: 12px; padding: 16px;
+             counter-increment: step; }
+  .loop li::before { content: counter(step); display: inline-grid; place-items: center; width: 28px; height: 28px;
+                     border-radius: 50%; background: var(--accent); color: #fff; font-weight: 700; margin-bottom: 8px; }
+  pre, code { font-family: ui-monospace, "SF Mono", Menlo, monospace; font-size: .88rem; }
+  pre { background: var(--code); padding: 16px; border-radius: 10px; overflow-x: auto; }
+  code { background: var(--code); padding: 1px 5px; border-radius: 4px; }
+  pre code { background: none; padding: 0; }
+  table { width: 100%; border-collapse: collapse; font-size: .95rem; }
+  th, td { text-align: left; padding: 8px 10px; border-bottom: 1px solid var(--line); vertical-align: top; }
+  .buttons { display: flex; gap: 12px; flex-wrap: wrap; margin-top: 24px; }
+  .button { padding: 10px 18px; border-radius: 10px; border: 1px solid var(--line); background: var(--card);
+            text-decoration: none; color: var(--fg); font-weight: 600; }
+  .button.primary { background: var(--accent); border-color: var(--accent); color: #fff; }
+  footer { color: var(--muted); font-size: .85rem; border-top: 1px solid var(--line); margin-top: 56px; padding-top: 16px; }
+  @media (max-width: 560px) { .photos { grid-template-columns: 1fr 1fr; } .photos img:last-child { display: none; } }
+</style>
+</head>
+<body>
+<main>
+<header>
+  <span class="tag">alias-visual-geometry</span>
+  <h1>Map a room with a robot car and a chat API</h1>
+  <p class="lead">Turns photos into a 3D model and a "where to go next" map with
+  <a href="https://github.com/facebookresearch/vggt">VGGT</a>. It hides behind an
+  OpenAI-compatible endpoint, so it runs next to your vLLM models behind the same router, key and URL.</p>
+  <div class="buttons">
+    <a class="button primary" href="https://github.com/surak/depth-map-through-vllm-router">Code on GitHub</a>
+    <a class="button" href="#api">API</a>
+    <a class="button" href="#run">Run it</a>
+  </div>
+</header>
+
+<section>
+  <div class="photos">
+    <img src="img/photo-00.jpg" alt="Photo of a yellow toy bulldozer on a table, from the front left">
+    <img src="img/photo-02.jpg" alt="The same bulldozer from another angle">
+    <img src="img/photo-04.jpg" alt="The same bulldozer from a third angle">
+  </div>
+  <figure>
+    <img src="img/cloud.jpg" alt="Coloured 3D point cloud of the bulldozer, the mat and the table, seen from above">
+    <figcaption>Six ordinary photos in, a coloured point cloud with 540,000 points out, in under 4 seconds
+    through the public router. (The photos are VGGT's own example scene.)</figcaption>
+  </figure>
+</section>
+
+<section>
+  <h2>The idea</h2>
+  <p>A LEGO®-compatible car driven by <a href="https://surak.github.io/brickremote/">brickremote</a>
+  gets a small camera. It has no wheel sensors and no map, but it can stop and take a photo.
+  A GPU far away works out the rest:</p>
+  <ol class="loop">
+    <li><strong>Stop and look.</strong> The car takes a few photos, turning a little between them.</li>
+    <li><strong>Send <code>step</code>.</strong> The mapper places every photo in 3D and finds the floor, walls and unexplored edges.</li>
+    <li><strong>Decide.</strong> A vision-language model sees the photo and the top-down map, and picks a move.</li>
+    <li><strong>Drive and repeat.</strong> When nothing is left to explore, <code>finish</code> builds the whole room.</li>
+  </ol>
+</section>
+
+<section id="api">
+  <h2>API</h2>
+  <p>It is a normal chat completion. The photos are <code>image_url</code> parts (base64 data URLs),
+  the text is a command, and the reply's content is JSON.</p>
+  <table>
+    <tr><th>Command</th><th>What it does</th></tr>
+    <tr><td><code>step session=hall camera_height_cm=9</code></td><td>Adds the photos and answers with pose, frontiers, nearest obstacle ahead and a top-down map</td></tr>
+    <tr><td><code>finish session=hall</code></td><td>Rebuilds from all photos (up to 96) and keeps a coloured point cloud (PLY)</td></tr>
+    <tr><td><code>download session=hall part=0</code></td><td>The PLY in 3 MB base64 pieces, small enough for any router</td></tr>
+    <tr><td><code>status session=hall</code></td><td>Photos and files of a session</td></tr>
+  </table>
+  <p>A <code>step</code> answer:</p>
+<pre><code>{"session": "hall", "frames": 12,
+ "pose": {"x_cm": 44.0, "z_cm": 35.0, "heading_deg": 77.4},
+ "frontiers": [{"angle": 20.9, "dist_cm": 45.2, "size_cells": 12}],
+ "obstacle_ahead_cm": 29.5, "explored_done": false,
+ "map_png": "iVBORw0KGgo…"}</code></pre>
+  <p><strong>Units:</strong> angles are relative to where the camera looks now, and positive means
+  left. Positions are in centimetres from the first photo.</p>
+  <p><strong>The map:</strong> <code>map_png</code> shows the floor in white, obstacles in black,
+  unknown parts in grey, frontiers in orange, and the path in blue.</p>
+  <p>From Python, with the official client:</p>
+<pre><code>from openai import OpenAI
+import base64
+
+client = OpenAI(base_url="https://api.blablador.fz-juelich.de/v1", api_key="…")
+photo = base64.b64encode(open("look.jpg", "rb").read()).decode()
+reply = client.chat.completions.create(
+    model="alias-visual-geometry",
+    messages=[{"role": "user", "content": [
+        {"type": "text", "text": "step session=hall camera_height_cm=9"},
+        {"type": "image_url", "image_url": {"url": f"data:image/jpeg;base64,{photo}"}},
+    ]}],
+)
+print(reply.choices[0].message.content)</code></pre>
+</section>
+
+<section>
+  <h2>How the map is made</h2>
+  <p>VGGT places all photos in one 3D frame, but it doesn't know how big anything is.</p>
+  <ul>
+    <li><strong>Scale.</strong> The camera sits at a known height on the car, so the mapper finds the
+    floor, the densest flat layer below the cameras, and that height turns VGGT units into centimetres.</li>
+    <li><strong>Grid.</strong> Points on the floor are free space. Points between 4 cm and a little
+    above the camera are obstacles. Everything else is unknown.</li>
+    <li><strong>Frontiers.</strong> Free cells at the edge of the unknown are grouped by direction.</li>
+  </ul>
+  <p><strong>Camera angle:</strong> tilt the camera slightly down. Without a visible floor there is no scale.</p>
+  <p><strong>Speed:</strong> on an RTX 3090, a step takes 1–2 seconds, and a final model from 96
+  photos takes about 20 seconds and 13 GB of GPU memory.</p>
+</section>
+
+<section id="run">
+  <h2>Run it</h2>
+<pre><code>git clone https://github.com/surak/depth-map-through-vllm-router
+cd depth-map-through-vllm-router
+uv venv -p 3.12 .venv
+uv pip install -p .venv/bin/python torch==2.5.1 torchvision==0.20.1 \
+    --index-url https://download.pytorch.org/whl/cu124
+uv pip install -p .venv/bin/python -e '.[model,test]'
+hf download facebook/VGGT-1B --local-dir models/VGGT-1B
+VLLM_API_KEY=secret .venv/bin/python -m mapper.server --model models/VGGT-1B --port 8030</code></pre>
+  <p>It answers <code>/health</code>, <code>/v1/models</code>, <code>/metrics</code> and
+  <code>/v1/chat/completions</code>, with or without streaming. That's enough for routers that
+  expect a vLLM backend. The repository includes a Slurm launcher that registers it with a synapse router.</p>
+</section>
+
+<footer>
+  <p>Code: MIT. VGGT-1B weights: Meta, non-commercial use only.
+  LEGO® is a trademark of the LEGO Group, which does not sponsor, authorize or endorse this project.</p>
+</footer>
+</main>
+</body>
+</html>

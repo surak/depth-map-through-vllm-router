@@ -4,6 +4,8 @@
 so it can sit next to vLLM models behind a router (synapse / Blablador) as
 **`alias-visual-geometry`**.
 
+Website: https://surak.github.io/depth-map-through-vllm-router/
+
 It is built for a small robot car that maps a room by itself: it stops, takes photos, sends them
 with `step`, and gets back where it is, which directions are still unexplored and how far the next
 obstacle is. When nothing is left to explore it sends `finish` and downloads a coloured point cloud.

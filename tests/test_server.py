@@ -72,6 +72,14 @@ def test_errors(client, text, expected):
     assert r.status_code == 400 and expected in r.json()["error"]["message"]
 
 
+def test_queue_command_and_metrics(client):
+    content(ask(client, "step session=one", images=2))
+    q = content(ask(client, "queue"))["queue"]
+    assert q == {"gpu_busy": False, "waiting": 0, "other_sessions_active": 1,
+                 "message": "1 other session(s) mapped something in the last 10 minutes"}
+    assert "vllm:num_requests_waiting 0" in client.get("/metrics").text
+
+
 def test_unknown_model(client):
     r = client.post("/v1/chat/completions", json={"model": "gpt-4", "messages": []})
     assert r.status_code == 404

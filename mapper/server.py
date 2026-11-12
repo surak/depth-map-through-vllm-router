@@ -9,6 +9,11 @@ is JSON. Commands:
   finish   reconstruct from all photos of the session and store a coloured point cloud (PLY)
   download fetch the PLY in base64 pieces: "download session=kitchen part=0"
   status   number of photos and files of a session
+  queue    how busy the GPU is and how many other sessions are mapping
+
+Every answer has a "queue" part saying how long the request waited for the GPU, how many requests
+were ahead of it, and how many other sessions were active in the last 10 minutes. Session names of
+other people are never shown, only counts.
 """
 
 from __future__ import annotations
@@ -19,8 +24,11 @@ import binascii
 import json
 import os
 import re
+import threading
 import time
 import uuid
+from collections import defaultdict
+from contextlib import contextmanager
 from pathlib import Path
 
 import numpy as np
@@ -79,9 +87,47 @@ def spread(n: int, k: int) -> list[int]:
     return sorted(set(np.linspace(0, n - 1, k).round().astype(int).tolist()))
 
 
+ACTIVE_SECONDS = 600
+
+
+class GpuQueue:
+    """First come, first served access to the GPU, with numbers people can be shown."""
+
+    def __init__(self):
+        self.cond = threading.Condition()
+        self.next_ticket = 0
+        self.serving = 0
+        self.busy = False
+
+    @contextmanager
+    def turn(self):
+        with self.cond:
+            ticket = self.next_ticket
+            self.next_ticket += 1
+            ahead = ticket - self.serving  # requests running or waiting before this one
+            started = time.monotonic()
+            while self.serving != ticket:
+                self.cond.wait()
+            self.busy = True
+        try:
+            yield {"ahead_on_arrival": ahead, "waited_s": round(time.monotonic() - started, 1)}
+        finally:
+            with self.cond:
+                self.busy = False
+                self.serving += 1
+                self.cond.notify_all()
+
+    def state(self) -> dict:
+        with self.cond:
+            return {"gpu_busy": self.busy, "waiting": self.next_ticket - self.serving - int(self.busy)}
+
+
 class Mapper:
     def __init__(self, runner, data_dir: Path, step_frames: int = 32, final_frames: int = 96,
                  default_height_cm: float = 10.0):
+        self.gpu = GpuQueue()
+        self.session_locks = defaultdict(threading.Lock)  # one request per session at a time
+        self.seen: dict[str, float] = {}  # session -> last request time
         self.runner = runner
         self.data_dir = data_dir
         self.step_frames = step_frames
@@ -111,14 +157,39 @@ class Mapper:
     def frames(self, folder: Path) -> list[Path]:
         return sorted((folder / "frames").glob("*.jpg"))
 
+    def reconstruct(self, paths: list[str]) -> tuple:
+        with self.gpu.turn() as waited:
+            return self.runner(paths), waited
+
+    def queue_state(self, session: str | None = None) -> dict:
+        now = time.time()
+        others = sum(1 for name, t in list(self.seen.items()) if name != session and now - t < ACTIVE_SECONDS)
+        state = self.gpu.state()
+        state["other_sessions_active"] = others
+        if state["gpu_busy"] or state["waiting"]:
+            state["message"] = (f"{state['waiting'] + state['gpu_busy']} request(s) are using or waiting for the GPU; "
+                                "a step takes a few seconds, a finish up to half a minute")
+        elif others:
+            state["message"] = f"{others} other session(s) mapped something in the last 10 minutes"
+        else:
+            state["message"] = "nobody else is mapping right now"
+        return state
+
     def run(self, text: str, images: list[bytes]) -> dict:
         command, options = parse_command(text)
         command = command or ("step" if images else "status")
+        if command == "queue":
+            return {"queue": self.queue_state(options.get("session"))}
         handler = {"step": self.step, "finish": self.finish, "download": self.download,
                    "status": self.status}.get(command)
         if handler is None:
-            raise CommandError(f"unknown command {command!r}; use step, finish, download or status")
-        return handler(options, images)
+            raise CommandError(f"unknown command {command!r}; use step, finish, download, status or queue")
+        session = self.session_dir(options).name
+        self.seen[session] = time.time()
+        with self.session_locks[session]:
+            result = handler(options, images)
+        result["queue"] = {**result.get("queue", {}), **self.queue_state(session)}
+        return result
 
     def step(self, options: dict, images: list[bytes]) -> dict:
         folder = self.session_dir(options)
@@ -131,11 +202,11 @@ class Mapper:
         if len(frames) < 2:
             return {"session": folder.name, "frames": len(frames), "note": "need at least 2 photos for a map"}
         picked = [str(frames[i]) for i in spread(len(frames), self.step_frames)]
-        rec = self.runner(picked)
+        rec, waited = self.reconstruct(picked)
         try:
             m = mapping.build_map(rec, meta["camera_height_cm"])
         except ValueError as e:
-            return {"session": folder.name, "frames": len(frames), "note": str(e)}
+            return {"session": folder.name, "frames": len(frames), "note": str(e), "queue": waited}
         png = mapping.render_png(m)
         (folder / "map.png").write_bytes(png)
         x, z = m.path_cm[-1]
@@ -149,6 +220,7 @@ class Mapper:
             "obstacle_ahead_cm": m.obstacle_ahead_cm,
             "explored_done": not m.frontiers,
             "map_png": base64.b64encode(png).decode(),
+            "queue": waited,
         }
 
     def finish(self, options: dict, images: list[bytes]) -> dict:
@@ -158,9 +230,9 @@ class Mapper:
         if len(frames) < 2:
             raise CommandError("need at least 2 photos")
         picked = [str(frames[i]) for i in spread(len(frames), self.final_frames)]
-        rec = self.runner(picked)
+        rec, waited = self.reconstruct(picked)
         points, colors = mapping.confident_points(rec)
-        result = {"session": folder.name, "frames": len(frames), "frames_used": len(picked)}
+        result = {"session": folder.name, "frames": len(frames), "frames_used": len(picked), "queue": waited}
         try:
             m = mapping.build_map(rec, meta["camera_height_cm"])
             points = points * m.scale_cm  # centimetres
@@ -207,7 +279,7 @@ class Mapper:
 
 def make_app(mapper: Mapper, names: list[str], api_key: str = "") -> FastAPI:
     app = FastAPI(title="visual geometry mapper")
-    stats = {"running": 0, "success": 0, "started": time.time()}
+    stats = {"success": 0, "started": time.time()}
 
     def unauthorized(request: Request):
         if api_key and request.headers.get("authorization", "") != f"Bearer {api_key}":
@@ -223,7 +295,8 @@ def make_app(mapper: Mapper, names: list[str], api_key: str = "") -> FastAPI:
 
     @app.get("/metrics")
     async def metrics():
-        lines = [f"vllm:num_requests_running {stats['running']}", "vllm:num_requests_waiting 0",
+        gpu = mapper.gpu.state()
+        lines = [f"vllm:num_requests_running {int(gpu['gpu_busy'])}", f"vllm:num_requests_waiting {gpu['waiting']}",
                  f"vllm:request_success_total {stats['success']}",
                  f"process_start_time_seconds {stats['started']}"]
         return PlainTextResponse("\n".join(lines) + "\n")
@@ -247,14 +320,11 @@ def make_app(mapper: Mapper, names: list[str], api_key: str = "") -> FastAPI:
         model = body.get("model") or names[0]
         if model not in names:
             return error(404, f"model {model!r} not served here; use one of {names}", "not_found_error")
-        stats["running"] += 1
         try:
             text, images = message_parts(body)
             result = await asyncio.to_thread(mapper.run, text, images)
         except CommandError as e:
             return error(400, str(e))
-        finally:
-            stats["running"] -= 1
         stats["success"] += 1
         content = json.dumps(result)
         reply_id, created = f"chatcmpl-{uuid.uuid4().hex}", int(time.time())

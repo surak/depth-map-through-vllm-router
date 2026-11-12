@@ -61,7 +61,6 @@ class UpstreamError(Exception):
 
 def make_app(upstream: Upstream, data_dir: Path) -> FastAPI:
     app = FastAPI(title="visual geometry web")
-    data_dir.mkdir(parents=True, exist_ok=True)
 
     def session_of(body: dict) -> str:
         name = str(body.get("session", ""))
@@ -93,6 +92,7 @@ def make_app(upstream: Upstream, data_dir: Path) -> FastAPI:
         session = session_of(await request.json())
         result = await upstream.ask(f"finish session={session}")
         if result.get("parts"):
+            data_dir.mkdir(parents=True, exist_ok=True)
             path = data_dir / f"{session}.ply"
             with path.open("wb") as f:
                 for part in range(result["parts"]):

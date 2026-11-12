@@ -11,7 +11,7 @@ import base64
 import json
 import os
 import re
-import socket
+import subprocess
 from pathlib import Path
 
 import httpx
@@ -116,13 +116,28 @@ def make_app(upstream: Upstream, data_dir: Path) -> FastAPI:
     return app
 
 
-def lan_address() -> str:
-    try:
-        with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as s:
-            s.connect(("10.255.255.255", 1))  # no packet is sent; this just picks the outgoing interface
-            return s.getsockname()[0]
-    except OSError:
-        return "127.0.0.1"
+def local_addresses() -> list[tuple[str, str]]:
+    """(interface, IPv4 address) of every network, so the right one can be picked when a VPN is on."""
+    for command in (["ip", "-4", "-o", "addr"], ["ifconfig"]):
+        try:
+            out = subprocess.run(command, capture_output=True, text=True, timeout=5).stdout
+        except (OSError, subprocess.SubprocessError):
+            continue
+        found, interface = [], ""
+        for line in out.splitlines():
+            if command[0] == "ip":
+                parts = line.split()
+                if len(parts) > 3:
+                    found.append((parts[1], parts[3].split("/")[0]))
+                continue
+            if line and not line[0].isspace():
+                interface = line.split(":")[0]
+            elif m := re.search(r"inet (\d+\.\d+\.\d+\.\d+)", line):
+                found.append((interface, m.group(1)))
+        found = [(i, a) for i, a in found if not a.startswith("127.")]
+        if found:
+            return found
+    return [("", "127.0.0.1")]
 
 
 def main() -> None:
@@ -142,7 +157,10 @@ def main() -> None:
         raise SystemExit(f"no OPENAI_API_KEY in {args.env}; copy .env.example to .env and fill it in")
     upstream = Upstream(env.get("OPENAI_BASE_URL", "https://api.blablador.fz-juelich.de/v1"),
                         env["OPENAI_API_KEY"], env.get("MAPPER_MODEL", "alias-visual-geometry"))
-    print(f"\n  Open on your phone:  http://{lan_address()}:{args.port}/\n", flush=True)
+    print("\n  Open on your phone (on the same Wi-Fi as this computer):", flush=True)
+    for interface, address in local_addresses():
+        print(f"    http://{address}:{args.port}/   ({interface})", flush=True)
+    print(flush=True)
     uvicorn.run(make_app(upstream, Path(args.data_dir)), host=args.host, port=args.port, log_level="warning")
 
 

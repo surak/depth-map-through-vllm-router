@@ -11,11 +11,12 @@
 #SBATCH --output=/p/haicluster/llama/blablador-fleet/logs/visual-geometry/%j.slurm.out
 #SBATCH --error=/p/haicluster/llama/blablador-fleet/logs/visual-geometry/%j.slurm.err
 # VGGT-1B mapping behind the OpenAI API, registered with synapse as alias-visual-geometry.
-# The repository copy is the source; the fleet runs the copy in blablador-fleet/launchers.
+# The repository copy is the source; the fleet runs the copy in blablador-fleet/launchers,
+# and the code is checked out in FastChat/depth-map-through-vllm-router.
 set -euo pipefail
 ROOT=/p/haicluster/llama/FastChat
 F=/p/haicluster/llama/blablador-fleet
-APP=/home/strube1/Devel/depth-map-through-vllm-router
+APP=/p/haicluster/llama/FastChat/depth-map-through-vllm-router
 PORT=8030
 cd "$APP"
 VLLM_API_KEY="$(cat "$ROOT/synapse-external/backend-key-$PORT")"

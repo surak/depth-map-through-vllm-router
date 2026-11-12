@@ -73,7 +73,8 @@ The server answers `/health`, `/v1/models`, `/metrics` and `/v1/chat/completions
 On HAICLUSTER, [`launchers/visual-geometry.slurm`](launchers/visual-geometry.slurm) is the job.
 It uses one GPU on haicluster1 and port 8030, reads its key from
 `synapse-external/backend-key-8030`, and registers with synapse through `supervisor.py`, like the
-other models. The fleet runs a copy of it from `blablador-fleet/launchers/`.
+other models. The code is checked out in `/p/haicluster/llama/FastChat/depth-map-through-vllm-router`,
+next to the other models, and the fleet runs a copy of the launcher from `blablador-fleet/launchers/`.
 
 ## Licence
 

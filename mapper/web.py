@@ -106,6 +106,10 @@ def make_app(upstream: Upstream, data_dir: Path) -> FastAPI:
     async def status(request: Request):
         return await upstream.ask(f"status session={session_of(await request.json())}")
 
+    @app.get("/api/queue")
+    async def queue(session: str = ""):
+        return await upstream.ask(f"queue session={session}" if SESSION_RE.match(session) else "queue")
+
     @app.get("/api/model/{name}.ply")
     async def model(name: str):
         path = data_dir / f"{name}.ply"

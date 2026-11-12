@@ -12,14 +12,14 @@ def test_first_come_first_served():
     def job(n):
         with gpu.turn() as info:
             started.append((n, info["ahead_on_arrival"]))
-            time.sleep(0.02)
+            time.sleep(0.1)
             order.append(n)
 
     threads = []
     for n in range(5):
         threads.append(threading.Thread(target=job, args=(n,)))
         threads[-1].start()
-        time.sleep(0.005)  # arrive in order
+        time.sleep(0.01)  # arrive in order, all before the first one is done
     for t in threads:
         t.join()
     assert order == [0, 1, 2, 3, 4]

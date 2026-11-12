@@ -27,6 +27,8 @@ class FakeRouter:
             answer = {"frames": images, "frontiers": [], "map_png": "iVBO"}
         elif text.startswith("finish"):
             answer = {"frames": 4, "frames_used": 4, "parts": 2, "points": 9, "units": "cm", "ply_path": "/secret"}
+        elif text.startswith("queue"):
+            answer = {"queue": {"gpu_busy": True, "waiting": 1, "other_sessions_active": 2, "message": "busy", "asked": text}}
         elif text.startswith("download"):
             half = len(PLY) // 2
             chunk = PLY[:half] if text.endswith("part=0") else PLY[half:]
@@ -89,3 +91,9 @@ def test_load_env(tmp_path, monkeypatch):
     values = load_env(env)
     assert values["OPENAI_API_KEY"] == "abc" and values["OPENAI_BASE_URL"] == "https://x/v1"
     assert values["MAPPER_MODEL"] == "other"  # not in .env, so the shell's value is used
+
+
+def test_queue(web):
+    q = web.get("/api/queue", params={"session": "hall"}).json()["queue"]
+    assert q["asked"] == "queue session=hall" and q["waiting"] == 1
+    assert web.get("/api/queue", params={"session": "../x"}).json()["queue"]["asked"] == "queue"

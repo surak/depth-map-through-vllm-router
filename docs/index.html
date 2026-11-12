@@ -102,6 +102,7 @@
     <tr><td><code>finish session=hall</code></td><td>Rebuilds from all photos (up to 96) and keeps a coloured point cloud (PLY)</td></tr>
     <tr><td><code>download session=hall part=0</code></td><td>The PLY in 3 MB base64 pieces, small enough for any router</td></tr>
     <tr><td><code>status session=hall</code></td><td>Photos and files of a session</td></tr>
+    <tr><td><code>queue</code></td><td>How busy the GPU is and how many other people are mapping</td></tr>
   </table>
   <p>A <code>step</code> answer:</p>
 <pre><code>{"session": "hall", "frames": 12,
@@ -113,6 +114,10 @@
   left. Positions are in centimetres from the first photo.</p>
   <p><strong>The map:</strong> <code>map_png</code> shows the floor in white, obstacles in black,
   unknown parts in grey, frontiers in orange, and the path in blue.</p>
+  <p><strong>Sharing the GPU:</strong> requests are served one at a time, first come first served.
+  Every answer has a <code>queue</code> part that says how long you waited, how many requests were
+  ahead of you, and how many other people mapped something in the last 10 minutes. It shows only
+  counts, never their session names.</p>
   <p>From Python, with the official client:</p>
 <pre><code>from openai import OpenAI
 import base64

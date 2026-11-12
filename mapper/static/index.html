@@ -44,6 +44,12 @@
   #map { width: 100%; max-width: 400px; margin: 0 auto; display: block; border-radius: 8px; image-rendering: pixelated; }
   .legend { color: var(--muted); font-size: .8rem; text-align: center; margin-top: 6px; }
   #viewer { width: 100%; height: 60vh; min-height: 320px; border-radius: 12px; background: #18181b; touch-action: none; }
+  #crowd { display: flex; gap: 10px; align-items: center; padding: 10px 14px; border-radius: 12px; margin-bottom: 16px;
+           border: 1px solid var(--line); background: var(--card); font-size: .95rem; }
+  #crowd .dot { width: 10px; height: 10px; border-radius: 50%; background: var(--good); flex: none; }
+  #crowd.busy .dot { background: var(--accent); animation: pulse 1s infinite alternate; }
+  #crowd.others .dot { background: #f59f00; }
+  @keyframes pulse { to { opacity: .3; } }
   [hidden] { display: none !important; }
 </style>
 </head>
@@ -51,6 +57,7 @@
 <main>
   <h1>📷 Room Mapper</h1>
   <p class="sub">Take photos all around a room, send them, and get a 3D model back.</p>
+  <div id="crowd" role="status" aria-live="polite" hidden><span class="dot"></span><span id="crowdtext"></span></div>
 
   <section class="card">
     <div class="row">
@@ -161,7 +168,38 @@ function session() {
   return name;
 }
 
+function showQueue(q) {
+  if (!q) return;
+  const busy = q.gpu_busy || q.waiting > 0;
+  $("crowd").hidden = false;
+  $("crowd").className = busy ? "busy" : q.other_sessions_active ? "others" : "";
+  const people = q.other_sessions_active;
+  let text = busy
+    ? `The GPU is busy: ${q.waiting + (q.gpu_busy ? 1 : 0)} request(s) running or waiting. Your photos will wait their turn.`
+    : people ? `${people} other ${people === 1 ? "person is" : "people are"} mapping right now. Sending may take a little longer.`
+    : "Nobody else is mapping right now.";
+  $("crowdtext").textContent = text;
+}
+
+async function pollQueue() {
+  if (document.hidden) return;
+  try {
+    const name = $("session").value.trim();
+    const r = await fetch("/api/queue?session=" + encodeURIComponent(name));
+    if (r.ok) showQueue((await r.json()).queue);
+  } catch {}
+}
+pollQueue();
+setInterval(pollQueue, 5000);
+document.addEventListener("visibilitychange", pollQueue);
+
+function waitedNote(q) {
+  if (!q || !q.waited_s || q.waited_s < 1) return "";
+  return ` Waited ${Math.round(q.waited_s)} s for ${q.ahead_on_arrival} request(s) from others.`;
+}
+
 function show(result) {
+  showQueue(result.queue);
   $("result").hidden = false;
   $("frames").textContent = result.frames ?? 0;
   if (result.frontiers) $("frontiers").textContent = result.frontiers.length;
@@ -173,6 +211,7 @@ $("send").onclick = async () => {
   const todo = photos.filter(p => !p.sent);
   $("send").disabled = $("pick").disabled = true;
   $("progress").hidden = false; $("progress").max = todo.length; $("progress").value = 0;
+  let waited = "";
   try {
     const name = session();
     for (let i = 0; i < todo.length; i += BATCH) {
@@ -184,8 +223,9 @@ $("send").onclick = async () => {
       $("progress").value = i + batch.length;
       show(result);
       if (result.note) say(result.note, "bad");
+      waited += waitedNote(result.queue);
     }
-    if (!$("message").classList.contains("bad")) say("Sent. Add more photos, or build the 3D model.", "good");
+    if (!$("message").classList.contains("bad")) say("Sent. Add more photos, or build the 3D model." + waited, "good");
   } catch (e) {
     say(e.message, "bad");
   } finally {
@@ -195,7 +235,8 @@ $("send").onclick = async () => {
 
 $("finish").onclick = async () => {
   $("finish").disabled = true;
-  say("Building the 3D model… this takes up to a minute.");
+  say("Building the 3D model… this takes up to a minute" +
+      ($("crowd").className === "busy" ? ", longer while others are using the GPU." : "."));
   try {
     const result = await api("/api/finish", { session: session() });
     show(result);
@@ -206,7 +247,7 @@ $("finish").onclick = async () => {
       (result.units === "cm" ? ", in centimetres." : ". No floor found, so the size is not to scale.") +
       " Drag to turn, pinch to zoom.";
     await view(result.ply_url);
-    say("Done!", "good");
+    say("Done!" + waitedNote(result.queue), "good");
     $("model").scrollIntoView({ behavior: "smooth" });
   } catch (e) {
     say(e.message, "bad");

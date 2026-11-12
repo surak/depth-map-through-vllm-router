@@ -21,6 +21,7 @@ command, and the answer's `content` is JSON.
 | `finish session=<name>` | Reconstruct from all photos (up to 96) and keep `model.ply` |
 | `download session=<name> part=<n>` | The PLY in 3 MB base64 pieces, so it fits through the router |
 | `status session=<name>` | Photos and files of a session |
+| `queue` | How busy the GPU is and how many other sessions are mapping |
 
 A `step` answer:
 
@@ -38,6 +39,26 @@ A `step` answer:
 - **Pictures for a vision-language model:** the map is meant to be shown to one, together with
   the latest photo, so it can choose the next move.
 
+### Other people
+
+The GPU works on one request at a time, first come first served. Every answer has a `queue` part,
+so callers know when they are sharing:
+
+```json
+"queue": {"ahead_on_arrival": 2, "waited_s": 3.4, "gpu_busy": true, "waiting": 1,
+          "other_sessions_active": 3,
+          "message": "2 request(s) are using or waiting for the GPU; a step takes a few seconds, a finish up to half a minute"}
+```
+
+- `ahead_on_arrival` and `waited_s`: how many requests were before this one, and how long it waited.
+- `gpu_busy` and `waiting`: the state right now.
+- `other_sessions_active`: other sessions with a request in the last 10 minutes. Other people's
+  session names are never shown.
+
+`queue` alone answers with just this part. Two requests for the same session never run at the same
+time, so photos sent from two devices at once can't overwrite each other. `/metrics` reports the
+running and waiting counts like vLLM does.
+
 [`examples/client.py`](examples/client.py) does this from the command line.
 
 ## Sending photos from a phone
@@ -48,7 +69,8 @@ cp .env.example .env      # put your router URL and key in it
 ```
 
 The page on the phone lets you pick or take photos, set the camera height, see the top-down map
-after each batch and build the 3D model. The model opens in a viewer you can turn with a finger, and
+after each batch and build the 3D model. A banner at the top shows whether other people are mapping
+or the GPU is busy, and the page says how long your photos waited. The model opens in a viewer you can turn with a finger, and
 can be downloaded as PLY.
 
 - **Photo size:** photos are shrunk to 1024 px in the browser before they are sent.

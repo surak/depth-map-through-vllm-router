@@ -1,7 +1,7 @@
 #!/bin/bash
 #SBATCH --job-name=visual-geometry-omega
 #SBATCH --partition=gpus
-#SBATCH --nodelist=haicluster1
+#SBATCH --nodelist=haicluster2
 #SBATCH --nodes=1
 #SBATCH --ntasks=1
 #SBATCH --cpus-per-task=8

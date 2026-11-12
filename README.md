@@ -128,7 +128,7 @@ It uses one GPU on haicluster1 and port 8030, reads its key from
 other models. The code is checked out in `/p/haicluster/llama/FastChat/depth-map-through-vllm-router`,
 next to the other models, and the fleet runs a copy of the launcher from `blablador-fleet/launchers/`.
 [`launchers/visual-geometry-omega.slurm`](launchers/visual-geometry-omega.slurm) is the VGGT-Ω job:
-another GPU on haicluster1, port 8031, `.venv-omega`, and its own sessions folder.
+one GPU on haicluster2 (haicluster1 is full), port 8031, `.venv-omega`, and its own sessions folder.
 
 ## Licence
 

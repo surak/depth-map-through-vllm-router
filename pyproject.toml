@@ -1,0 +1,28 @@
+[project]
+name = "depth-map-through-vllm-router"
+version = "0.1.0"
+description = "Serve VGGT 3D mapping behind an OpenAI-compatible API, so it can sit next to vLLM models behind a router"
+requires-python = ">=3.10"
+dependencies = [
+    "fastapi",
+    "uvicorn[standard]",
+    "numpy<2",
+    "pillow",
+]
+
+[project.optional-dependencies]
+model = [
+    "torch",
+    "torchvision",
+    "vggt @ git+https://github.com/facebookresearch/vggt@a288dd0",
+]
+test = ["pytest", "httpx"]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["mapper"]
+[tool.hatch.metadata]
+allow-direct-references = true

@@ -5,10 +5,15 @@ description = "Serve VGGT 3D mapping behind an OpenAI-compatible API, so it can 
 requires-python = ">=3.10"
 dependencies = [
     "fastapi",
+    "httpx",
     "uvicorn[standard]",
     "numpy<2",
     "pillow",
 ]
+
+[project.scripts]
+mapper-web = "mapper.web:main"
+mapper-server = "mapper.server:main"
 
 [project.optional-dependencies]
 model = [
@@ -16,7 +21,7 @@ model = [
     "torchvision",
     "vggt @ git+https://github.com/facebookresearch/vggt@a288dd0",
 ]
-test = ["pytest", "httpx"]
+test = ["pytest"]
 
 [build-system]
 requires = ["hatchling"]

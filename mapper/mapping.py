@@ -199,7 +199,7 @@ def render_png(m: Map, target_px: int = 400) -> bytes:
     if len(pts) > 1:
         draw.line(pts, fill=(30, 90, 255), width=2)
     x, y = pts[-1]
-    r = max(3, k * 2)
+    r = max(4, min(8, k // 2))
     draw.ellipse((x - r, y - r, x + r, y + r), fill=(220, 0, 0))
     draw.line((x, y, x + 3 * r * math.sin(m.heading), y - 3 * r * math.cos(m.heading)), fill=(220, 0, 0), width=2)
     out = io.BytesIO()
